@@ -1,0 +1,247 @@
+
+
+import os
+import re
+import yt_dlp
+import random
+import asyncio
+import aiohttp
+from pathlib import Path
+
+from py_yt import Playlist, VideosSearch
+
+from xeyal import logger
+from xeyal.helpers import Track, utils
+
+
+class YouTube:
+    def __init__(self):
+        self.base = "https://www.youtube.com/watch?v="
+        self.cookies = []
+        self.checked = False
+        self.cookie_dir = "xeyal/cookies"
+        self.warned = False
+        self.regex = re.compile(
+            r"(https?://)?(www\.|m\.|music\.)?"
+            r"(youtube\.com/(watch\?v=|shorts/|playlist\?list=)|youtu\.be/)"
+            r"([A-Za-z0-9_-]{11}|PL[A-Za-z0-9_-]+)([&?][^\s]*)?"
+        )
+        self.iregex = re.compile(
+            r"https?://(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be)"
+            r"(?!/(watch\?v=[A-Za-z0-9_-]{11}|shorts/[A-Za-z0-9_-]{11}"
+            r"|playlist\?list=PL[A-Za-z0-9_-]+|[A-Za-z0-9_-]{11}))\S*"
+        )
+
+    def get_cookies(self):
+        if not self.checked:
+            for file in os.listdir(self.cookie_dir):
+                if file.endswith(".txt"):
+                    self.cookies.append(f"{self.cookie_dir}/{file}")
+            self.checked = True
+        if not self.cookies:
+            if not self.warned:
+                self.warned = True
+                logger.warning("Cookies are missing; downloads might fail.")
+            return None
+        return random.choice(self.cookies)
+
+    async def save_cookies(self, urls: list[str]) -> None:
+        logger.info("Saving cookies from urls...")
+        async with aiohttp.ClientSession() as session:
+            for url in urls:
+                name = url.split("/")[-1]
+                link = "https://batbin.me/raw/" + name
+                async with session.get(link) as resp:
+                    resp.raise_for_status()
+                    with open(f"{self.cookie_dir}/{name}.txt", "wb") as fw:
+                        fw.write(await resp.read())
+        logger.info(f"Cookies saved in {self.cookie_dir}.")
+
+    def valid(self, url: str) -> bool:
+        return bool(re.match(self.regex, url))
+
+    def invalid(self, url: str) -> bool:
+        return bool(re.match(self.iregex, url))
+
+    async def search(self, query: str, m_id: int, video: bool = False) -> Track | None:
+        try:
+            _search = VideosSearch(query, limit=1, with_live=False)
+            results = await _search.next()
+        except Exception:
+            return None
+        if results and results["result"]:
+            data = results["result"][0]
+            return Track(
+                id=data.get("id"),
+                channel_name=data.get("channel", {}).get("name"),
+                duration=data.get("duration"),
+                duration_sec=utils.to_seconds(data.get("duration")),
+                message_id=m_id,
+                title=data.get("title")[:25],
+                thumbnail=data.get("thumbnails", [{}])[-1].get("url").split("?")[0],
+                url=data.get("link"),
+                view_count=data.get("viewCount", {}).get("short"),
+                video=video,
+            )
+        return None
+
+    async def from_url(self, url: str, m_id: int, video: bool = False) -> Track | None:
+        cookie = self.get_cookies()
+        opts = {
+            "quiet": True,
+            "noplaylist": True,
+            "geo_bypass": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "nocheckcertificate": True,
+            "cookiefile": cookie,
+        }
+
+        def _extract():
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                try:
+                    return ydl.extract_info(url, download=False)
+                except Exception as ex:
+                    logger.warning("Info extraction failed: %s", ex)
+                    return None
+
+        data = await asyncio.to_thread(_extract)
+        if not data:
+            return None
+
+        duration = int(data.get("duration") or 0)
+        return Track(
+            id=data.get("id"),
+            channel_name=data.get("uploader") or data.get("channel"),
+            duration=utils.to_duration(duration),
+            duration_sec=duration,
+            message_id=m_id,
+            title=(data.get("title") or "")[:60],
+            thumbnail=data.get("thumbnail"),
+            url=data.get("webpage_url") or url,
+            view_count=str(data.get("view_count") or ""),
+            video=video,
+        )
+
+    async def playlist(self, limit: int, user: str, url: str, video: bool) -> list[Track | None]:
+        tracks = []
+        try:
+            plist = await Playlist.get(url)
+            for data in plist["videos"][:limit]:
+                track = Track(
+                    id=data.get("id"),
+                    channel_name=data.get("channel", {}).get("name", ""),
+                    duration=data.get("duration"),
+                    duration_sec=utils.to_seconds(data.get("duration")),
+                    title=data.get("title")[:25],
+                    thumbnail=data.get("thumbnails")[-1].get("url").split("?")[0],
+                    url=data.get("link").split("&list=")[0],
+                    user=user,
+                    view_count="",
+                    video=video,
+                )
+                tracks.append(track)
+        except Exception:
+            pass
+        return tracks
+
+    async def download_raw(self, video_id: str, video: bool = False) -> str | None:
+        """Sesli sohbetde calmaq ucun suretli yol: tam mp3 transcode etmir,
+        sadece orijinal audio axinini goturur (remux) - pytgcalls/ffmpeg
+        bunu birbasa cala bilir. Yalniz qrup sesli sohbeti ucundur;
+        /song ile fayl gonderende hele de tam download() (mp3) islenir."""
+        if video:
+            return await self.download(video_id, video=True)
+
+        import glob
+        existing = glob.glob(f"downloads/{video_id}.*")
+        if existing:
+            return existing[0]
+
+        url = self.base + video_id
+        cookie = self.get_cookies()
+        opts = {
+            "outtmpl": "downloads/%(id)s.%(ext)s",
+            "quiet": True,
+            "noplaylist": True,
+            "geo_bypass": True,
+            "no_warnings": True,
+            "overwrites": False,
+            "nocheckcertificate": True,
+            "cookiefile": cookie,
+            "concurrent_fragment_downloads": 8,
+            "http_chunk_size": 10485760,
+            "format": "bestaudio/best",
+            "postprocessors": [
+                {"key": "FFmpegExtractAudio", "preferredcodec": "best"}
+            ],
+        }
+
+        def _download():
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                try:
+                    ydl.download([url])
+                except (yt_dlp.utils.DownloadError, yt_dlp.utils.ExtractorError):
+                    return None
+                except Exception as ex:
+                    logger.warning("Raw download failed: %s", ex)
+                    return None
+            matches = glob.glob(f"downloads/{video_id}.*")
+            return matches[0] if matches else None
+
+        return await asyncio.to_thread(_download)
+
+
+    async def download(self, video_id: str, video: bool = False) -> str | None:
+        url = self.base + video_id
+        ext = "mp4" if video else "mp3"
+        filename = f"downloads/{video_id}.{ext}"
+
+        if Path(filename).exists():
+            return filename
+
+        cookie = self.get_cookies()
+        base_opts = {
+            "outtmpl": "downloads/%(id)s.%(ext)s",
+            "quiet": True,
+            "noplaylist": True,
+            "geo_bypass": True,
+            "no_warnings": True,
+            "overwrites": False,
+            "nocheckcertificate": True,
+            "cookiefile": cookie,
+            "concurrent_fragment_downloads": 8,
+            "http_chunk_size": 10485760,
+        }
+
+        if video:
+            ydl_opts = {
+                **base_opts,
+                "format": "(bestvideo[height<=?720][width<=?1280][ext=mp4])+(bestaudio)",
+                "merge_output_format": "mp4",
+            }
+        else:
+            ydl_opts = {
+                **base_opts,
+                "format": "bestaudio/best",
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "128",
+                    }
+                ],
+            }
+
+        def _download():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                try:
+                    ydl.download([url])
+                except (yt_dlp.utils.DownloadError, yt_dlp.utils.ExtractorError):
+                    return None
+                except Exception as ex:
+                    logger.warning("Download failed: %s", ex)
+                    return None
+            return filename if Path(filename).exists() else None
+
+        return await asyncio.to_thread(_download)
