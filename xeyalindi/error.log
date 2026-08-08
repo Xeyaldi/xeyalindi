@@ -1,0 +1,68 @@
+[27-Jul-26 19:34:43 - INFO] - xeyal: Cache directories updated.
+[27-Jul-26 19:34:44 - INFO] - xeyal: Loaded languages: pa, en, ar, de, fr, ja, zh, es, hi, pt, tr, az, ru
+[27-Jul-26 19:34:46 - INFO] - xeyal: Database connection successful. (1.22s)
+[27-Jul-26 19:34:46 - INFO] - xeyal: Database cache loaded.
+[27-Jul-26 19:34:47 - INFO] - xeyal: Bot started as @Eko_Music_Bot
+[27-Jul-26 19:34:48 - INFO] - xeyal: Assistant 1 started as @eko_music_asistan
+[27-Jul-26 19:34:48 - INFO] - xeyal: PyTgCalls client(s) started.
+[27-Jul-26 19:34:48 - INFO] - xeyal: Loaded 29 modules.
+[27-Jul-26 19:34:48 - INFO] - xeyal: Saving cookies from urls...
+[27-Jul-26 19:34:49 - INFO] - xeyal: Cookies saved in xeyal/cookies.
+[27-Jul-26 19:34:49 - INFO] - xeyal: Loaded 11 sudo users.
+[27-Jul-26 19:35:02 - ERROR] - pyrogram.dispatcher: Unexpected exception raised in MessageHandler:
+Traceback (most recent call last):
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/dispatcher.py", line 429, in handler_worker
+    await handler.callback(self.client, *args)
+  File "/root/elsen_music/xeyal/core/lang.py", line 90, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/elsen_music/xeyal/plugins/start.py", line 39, in start
+    await message.reply_photo(
+    ...<4 lines>...
+    )
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/types/messages_and_media/message.py", line 4859, in reply_photo
+    return await self._client.send_photo(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<28 lines>...
+    )
+    ^
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/methods/messages/send_photo.py", line 285, in send_photo
+    r = await self.invoke(
+        ^^^^^^^^^^^^^^^^^^
+    ...<23 lines>...
+    )
+    ^
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/methods/advanced/invoke.py", line 107, in invoke
+    r = await session.invoke(
+        ^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/session/session.py", line 551, in invoke
+    return await self.send(query, timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/session/session.py", line 473, in send
+    message = await self.msg_factory.create(data)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/session/internals/msg_factory.py", line 65, in create
+    return Message(body, msg_id, seq_no, len(body))
+                                         ~~~^^^^^^
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/raw/core/tl_object.py", line 81, in __len__
+    return len(self.write())
+               ~~~~~~~~~~^^
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/raw/functions/messages/send_media.py", line 212, in write
+    b.write(self.reply_markup.write())
+            ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/raw/types/reply_inline_markup.py", line 72, in write
+    b.write(Vector(self.rows))
+            ~~~~~~^^^^^^^^^^^
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/raw/core/primitives/vector.py", line 65, in __new__
+    + [cast(bytes, t(i)) if t else i.write() for i in value]
+                                   ~~~~~~~^^
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/raw/types/keyboard_button_row.py", line 72, in write
+    b.write(Vector(self.buttons))
+            ~~~~~~^^^^^^^^^^^^^^
+  File "/root/elsen_music/.venv/lib/python3.13/site-packages/pyrogram/raw/core/primitives/vector.py", line 65, in __new__
+    + [cast(bytes, t(i)) if t else i.write() for i in value]
+                                   ^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
